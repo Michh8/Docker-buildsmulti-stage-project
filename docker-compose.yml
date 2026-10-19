@@ -1,0 +1,70 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    environment:
+      API_URL: http://nginx:8000
+    depends_on:
+      nginx:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:?Define APP_KEY in .env}
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: mysql
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE:?Required}
+      DB_USERNAME: ${MYSQL_USER:?Required}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?Required}
+      SESSION_DRIVER: array
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+  nginx:
+    build:
+      context: ./backend
+      target: nginx
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      - backend
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8000/api/health]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  database:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?Required}
+      MYSQL_USER: ${MYSQL_USER:?Required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Required}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -e "SELECT 1"']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+volumes:
+  mysql-data:

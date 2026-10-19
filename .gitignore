@@ -1,0 +1,7 @@
+.env
+*.log
+**/node_modules/
+**/.next/
+**/vendor/
+**/.env
+**/storage/logs/*.log
